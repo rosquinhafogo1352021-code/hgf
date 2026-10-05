@@ -79,9 +79,10 @@
         #radar-status, #frame-time { color: #c7c7c7; font-size: 12px; line-height: 1.4; }
         #radar-status { margin: 0; }
 
-        .legend { display: flex; align-items: center; gap: 10px; }
-        .legend img { display: block; width: 62px; height: 98px; object-fit: contain; }
-        .legend span { color: #c7c7c7; font-size: 12px; line-height: 1.4; }
+        .legend { display: grid; gap: 5px; }
+        .legend img { display: block; width: 100%; height: 14px; object-fit: fill; border: 1px solid #666; }
+        .legend-labels { display: flex; justify-content: space-between; color: #c7c7c7; font-size: 10px; }
+        .legend span { color: #c7c7c7; font-size: 11px; line-height: 1.3; }
 
         .radar-footer {
             display: flex;
@@ -109,7 +110,6 @@
             .radar-panel { grid-template-columns: 1fr; gap: 10px; }
             .radar-controls { grid-template-columns: auto auto auto; }
             #timeline { grid-column: 1 / -1; grid-row: 2; }
-            .legend img { width: 48px; height: 76px; }
             .radar-footer { flex-direction: column; }
         }
     </style>
@@ -133,7 +133,9 @@
             </div>
             <div class="legend">
                 <img id="radar-legend" alt="Legenda oficial de refletividade dBZ do IPMET" hidden>
-                <span>Escala dBZ<br>do IPMET</span>
+                <div class="legend-labels" aria-label="Valores da escala dBZ">
+                    <span>7</span><span>19</span><span>28</span><span>37</span><span>46</span><span>55 dBZ</span>
+                </div>
             </div>
             <p id="radar-status" role="status" aria-live="polite">Conectando aos dados oficiais do Radar GIS Local...</p>
         </section>
@@ -242,8 +244,9 @@
                 frameCounter.textContent = `Quadro ${currentFrame + 1} de ${frames.length}`;
                 frameTime.textContent = `Horário do GIS IPMET: ${frame.radarTime.replace("_", " ")} UTC`;
                 const cacheKey = encodeURIComponent(frame.capturedAt);
-                radarLayer.setUrl(`${frame.image}?v=${cacheKey}`);
-                fetch(`${frame.alerts}?v=${cacheKey}`, { cache: "no-store" })
+                const radarDirectory = new URL("radar/", window.location.href);
+                radarLayer.setUrl(`${new URL(frame.image, radarDirectory).href}?v=${cacheKey}`);
+                fetch(`${new URL(frame.alerts, radarDirectory).href}?v=${cacheKey}`, { cache: "no-store" })
                     .then(response => {
                         if (!response.ok) throw new Error("Falha ao carregar os alertas TITAN.");
                         return response.json();
@@ -306,8 +309,9 @@
                         .catch(() => {});
                 }
 
+                const radarDirectory = new URL("radar/", window.location.href);
                 const legend = document.getElementById("radar-legend");
-                legend.src = `radar/${manifest.legend}?v=${encodeURIComponent(manifest.fetchedAt)}`;
+                legend.src = `${new URL(manifest.legend, radarDirectory).href}?v=${encodeURIComponent(manifest.fetchedAt)}`;
                 legend.hidden = false;
                 const selectedIndex = frames.findIndex(frame => frame.image === oldPath);
                 showFrame(selectedIndex >= 0 ? selectedIndex : frames.length - 1);

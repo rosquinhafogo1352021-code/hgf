@@ -85,7 +85,9 @@ def main(output_directory):
         if gif.format != "GIF" or gif.width < 812 or gif.height < 448:
             raise SystemExit("O produto oficial do IPMET mudou; não foi possível validar a legenda dBZ.")
         gif.seek(0)
-        legend = gif.convert("RGB").crop((690, 210, 812, 405))
+        legend = gif.convert("RGB").crop((750, 226, 751, 394))
+        legend = legend.transpose(Image.Transpose.ROTATE_270)
+        legend = legend.resize((720, 14), Image.Resampling.BICUBIC)
     (output / "legend.png").write_bytes(_png_bytes(legend))
 
     titan_query = urllib.parse.urlencode({"data_hora": radar_time})
