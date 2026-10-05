@@ -27,7 +27,7 @@ def fetch(url, referer, accept="*/*"):
         headers={
             "Accept": accept,
             "Referer": referer,
-            "User-Agent": "Mozilla/5.0 (compatible; IPMET-GIS-Snapshot/1.0)",
+            "User-Agent": "Mozilla/5.0",
         },
     )
     with urllib.request.urlopen(request, timeout=40) as response:
@@ -49,7 +49,7 @@ def main(output_directory):
     frames_directory = output / "frames"
     frames_directory.mkdir(parents=True, exist_ok=True)
 
-    _, gis_html = fetch(GIS_PAGE, f"{IPMET}/2mobileGis.php", "text/html")
+    _, gis_html = fetch(GIS_PAGE, GIS_PAGE, "text/html")
     match = re.search(rb"var\s+data_hora\s*=\s*['\"]([^'\"]+)", gis_html)
     if match is None:
         raise SystemExit("Não foi possível ler o horário atual do GIS oficial do IPMET.")
