@@ -4,9 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#080808">
-    <meta http-equiv="refresh" content="0; url=gis.html">
-    <title>Radar GIS Local | IPMET</title>
-    <script>window.location.replace("gis.html");</script>
+    <title>Radar de precipitação RainViewer | São Paulo</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <style>
         * { box-sizing: border-box; }
 
@@ -20,7 +19,7 @@
         }
 
         .radar-app {
-            width: min(100%, 1000px);
+            width: min(100%, 1100px);
             margin: 0 auto;
             border-top: 3px solid #e11d2e;
         }
@@ -30,50 +29,38 @@
             justify-content: space-between;
             align-items: baseline;
             gap: 12px;
-            padding: 16px;
+            padding: 12px 16px;
         }
 
-        h1 {
-            margin: 0;
-            font-size: 20px;
-            font-weight: 600;
-        }
+        h1 { margin: 0; font-size: 19px; font-weight: 600; }
+        .source-link { color: #ff6671; font-size: 13px; }
 
-        .source-link {
-            color: #ff6671;
-            font-size: 13px;
-        }
-
-        .radar-image-wrap {
-            display: grid;
-            min-height: 220px;
-            place-items: center;
-            padding: 8px;
-            background: #000;
-        }
-
-        #radar-frame {
-            display: block;
+        #radar-map {
             width: 100%;
-            height: auto;
-            max-height: 70vh;
-            object-fit: contain;
+            height: min(68vh, 620px);
+            min-height: 380px;
+            background: #171b20;
         }
 
-        #radar-frame[hidden] { display: none; }
-
-        .radar-controls {
+        .radar-panel {
             display: grid;
-            grid-template-columns: auto auto auto minmax(100px, 1fr);
-            gap: 8px;
+            grid-template-columns: minmax(260px, 1fr) minmax(220px, 320px);
+            gap: 16px;
             align-items: center;
             padding: 12px 16px;
             border-top: 1px solid #303030;
         }
 
+        .radar-controls {
+            display: grid;
+            grid-template-columns: auto auto auto minmax(120px, 1fr);
+            gap: 8px;
+            align-items: center;
+        }
+
         button {
-            min-height: 38px;
-            padding: 0 12px;
+            min-height: 36px;
+            padding: 0 11px;
             border: 1px solid #505050;
             border-radius: 4px;
             color: #f4f4f4;
@@ -82,7 +69,7 @@
             cursor: pointer;
         }
 
-        button:hover, button:focus-visible {
+        button:enabled:hover, button:enabled:focus-visible {
             border-color: #e11d2e;
             outline: none;
         }
@@ -90,17 +77,57 @@
         #play-button { border-color: #e11d2e; }
         #timeline { width: 100%; accent-color: #e11d2e; }
 
+        #radar-time, #radar-status, .legend-title {
+            color: #d2d2d2;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        #radar-status { margin: 4px 0 0; }
+        .legend { display: grid; gap: 5px; }
+        .legend-bar {
+            height: 12px;
+            border: 1px solid #666;
+            background: linear-gradient(90deg,
+                #88ddee 0% 8.33%,
+                #00a3e0 8.33% 16.66%,
+                #0077aa 16.66% 24.99%,
+                #005588 24.99% 33.32%,
+                #ffee00 33.32% 41.65%,
+                #ffaa00 41.65% 49.98%,
+                #ff4400 49.98% 58.31%,
+                #c10000 58.31% 66.64%,
+                #ffaaff 66.64% 74.97%,
+                #ff77ff 74.97% 83.3%,
+                #ffffff 83.3% 91.63%,
+                #00ff00 91.63% 100%);
+        }
+
+        .legend-values {
+            display: flex;
+            justify-content: space-between;
+            color: #c7c7c7;
+            font-size: 10px;
+        }
+
         .radar-footer {
             display: flex;
             justify-content: space-between;
             gap: 12px;
-            padding: 0 16px 14px;
-            color: #bdbdbd;
-            font-size: 12px;
+            padding: 0 16px 12px;
+            color: #aaa;
+            font-size: 11px;
         }
 
-        @media (max-width: 600px) {
+        #radar-map .rainviewer-pixels {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        @media (max-width: 650px) {
+            #radar-map { height: 58vh; min-height: 360px; }
             .radar-header { align-items: flex-start; flex-direction: column; }
+            .radar-panel { grid-template-columns: 1fr; gap: 10px; }
             .radar-controls { grid-template-columns: auto auto auto; }
             #timeline { grid-column: 1 / -1; grid-row: 2; }
             .radar-footer { flex-direction: column; }
@@ -110,47 +137,89 @@
 <body>
     <main class="radar-app">
         <header class="radar-header">
-            <h1>Radar Meteorológico IPMET</h1>
-            <a class="source-link" href="https://www.ipmetradar.com.br/2animRadar.php" target="_blank" rel="noopener noreferrer">Produto oficial do IPMET</a>
+            <h1>Radar de precipitação · RainViewer</h1>
+            <a class="source-link" href="https://www.rainviewer.com/weather-radar-map-live.html" target="_blank" rel="noopener noreferrer">Fonte RainViewer</a>
         </header>
-        <div class="radar-image-wrap">
-            <img id="radar-frame" alt="Quadro do radar animado do IPMET" hidden>
-            <p id="radar-status" role="status">Carregando produto oficial do IPMET...</p>
-        </div>
-        <section class="radar-controls" aria-label="Controles da animação do radar">
-            <button id="previous-button" type="button" aria-label="Quadro anterior">Anterior</button>
-            <button id="play-button" type="button" aria-pressed="false" disabled>Iniciar animação</button>
-            <button id="next-button" type="button" aria-label="Próximo quadro" disabled>Próximo</button>
-            <input id="timeline" type="range" min="0" max="0" value="0" step="1" aria-label="Selecionar quadro do radar" disabled>
+        <div id="radar-map" role="application" aria-label="Pixels de precipitação RainViewer sobre o estado de São Paulo"></div>
+        <section class="radar-panel" aria-label="Controles e legenda do radar">
+            <div>
+                <div class="radar-controls">
+                    <button id="previous-button" type="button" aria-label="Quadro anterior" disabled>Anterior</button>
+                    <button id="play-button" type="button" aria-pressed="false" disabled>Iniciar animação</button>
+                    <button id="next-button" type="button" aria-label="Próximo quadro" disabled>Próximo</button>
+                    <input id="timeline" type="range" min="0" max="0" value="0" step="1" aria-label="Selecionar horário do radar" disabled>
+                </div>
+                <p id="radar-time">Carregando imagens RainViewer...</p>
+                <p id="radar-status" role="status" aria-live="polite">São Paulo · RainViewer</p>
+            </div>
+            <div class="legend" aria-label="Legenda oficial RainViewer dBZ">
+                <span class="legend-title">Refletividade · dBZ (paleta RainViewer)</span>
+                <div class="legend-bar" aria-hidden="true"></div>
+                <div class="legend-values" aria-hidden="true">
+                    <span>15</span><span>20</span><span>25</span><span>30</span><span>35</span><span>40</span><span>45</span><span>50</span><span>55</span><span>60</span><span>65</span><span>75+ dBZ</span>
+                </div>
+            </div>
         </section>
         <footer class="radar-footer">
-            <span id="frame-counter">Aguardando quadros</span>
-            <span id="sync-time">A atualização ocorre quando o GitHub Pages publica uma nova captura.</span>
+            <span id="frame-counter">Aguardando dados RainViewer</span>
+            <span>Tiles originais RainViewer · sem suavização</span>
         </footer>
     </main>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         (() => {
-            const image = document.getElementById("radar-frame");
-            const status = document.getElementById("radar-status");
+            const mapElement = document.getElementById("radar-map");
             const timeline = document.getElementById("timeline");
             const playButton = document.getElementById("play-button");
             const previousButton = document.getElementById("previous-button");
             const nextButton = document.getElementById("next-button");
+            const timeLabel = document.getElementById("radar-time");
+            const statusLabel = document.getElementById("radar-status");
             const frameCounter = document.getElementById("frame-counter");
-            const syncTime = document.getElementById("sync-time");
+            const saoPauloBounds = L.latLngBounds([[-25.310889, -53.108193], [-19.779185, -44.160514]]);
+            const map = L.map(mapElement, {
+                minZoom: 5,
+                maxZoom: 10,
+                maxBounds: saoPauloBounds,
+                maxBoundsViscosity: 1,
+                zoomSnap: 1
+            }).setView([-23.55, -46.63], 6);
+
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                maxZoom: 19,
+                attribution: "&copy; OpenStreetMap contributors"
+            }).addTo(map);
+
+            let host = "";
             let frames = [];
             let currentFrame = 0;
+            let radarLayer = null;
             let playbackTimer = null;
 
             function showFrame(index) {
-                currentFrame = (index + frames.length) % frames.length;
+                if (frames.length === 0) return;
+                currentFrame = Math.max(0, Math.min(frames.length - 1, index));
+                const frame = frames[currentFrame];
+                const tileUrl = `${host}${frame.path}/256/{z}/{x}/{y}/2/0_1.png`;
                 timeline.value = String(currentFrame);
                 frameCounter.textContent = `Quadro ${currentFrame + 1} de ${frames.length}`;
-                image.src = `${frames[currentFrame].file}?v=${Date.now()}`;
+                timeLabel.textContent = `RainViewer · ${new Date(frame.time * 1000).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}`;
+
+                if (radarLayer) map.removeLayer(radarLayer);
+                radarLayer = L.tileLayer(tileUrl, {
+                    minZoom: 0,
+                    maxZoom: 10,
+                    tileSize: 256,
+                    opacity: 0.9,
+                    noWrap: true,
+                    updateWhenIdle: true,
+                    keepBuffer: 0,
+                    className: "rainviewer-pixels"
+                }).addTo(map);
             }
 
-            function stopPlayback() {
+            function stopAnimation() {
                 if (playbackTimer !== null) window.clearTimeout(playbackTimer);
                 playbackTimer = null;
                 playButton.textContent = "Iniciar animação";
@@ -160,60 +229,62 @@
             function advanceFrame() {
                 currentFrame = (currentFrame + 1) % frames.length;
                 showFrame(currentFrame);
-                playbackTimer = window.setTimeout(advanceFrame, frames[currentFrame].duration);
+                playbackTimer = window.setTimeout(advanceFrame, 600);
             }
 
-            fetch(`radar/manifest.json?v=${Date.now()}`, { cache: "no-store" })
-                .then(response => {
-                    if (!response.ok) throw new Error("O pacote atualizado do radar ainda não foi publicado.");
-                    return response.json();
-                })
-                .then(manifest => {
-                    frames = manifest.frames;
-                    if (!Array.isArray(frames) || frames.length < 2) {
-                        throw new Error("O IPMET não forneceu quadros suficientes para animar.");
-                    }
-
-                    timeline.max = String(frames.length - 1);
-                    timeline.disabled = false;
-                    playButton.disabled = false;
-                    previousButton.disabled = false;
-                    nextButton.disabled = false;
-                    status.hidden = true;
-                    image.hidden = false;
-                    syncTime.textContent = `Arquivo recebido do IPMET em: ${new Date(manifest.fetchedAt).toLocaleString("pt-BR")}`;
-                    showFrame(frames.length - 1);
-                })
-                .catch(error => {
-                    status.textContent = `${error.message} Confira o produto oficial do IPMET pelo link acima.`;
-                });
-
-            playButton.addEventListener("click", () => {
-                if (playbackTimer !== null) {
-                    stopPlayback();
-                    return;
-                }
-
-                if (currentFrame === frames.length - 1) showFrame(0);
-                playButton.textContent = "Pausar";
-                playButton.setAttribute("aria-pressed", "true");
-                playbackTimer = window.setTimeout(advanceFrame, frames[currentFrame].duration);
-            });
+            function loadFrames() {
+                fetch(`https://api.rainviewer.com/public/weather-maps.json?t=${Date.now()}`, { cache: "no-store" })
+                    .then(response => {
+                        if (!response.ok) throw new Error("A API RainViewer está indisponível.");
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (!data.radar || !Array.isArray(data.radar.past) || data.radar.past.length < 2) {
+                            throw new Error("O RainViewer não retornou quadros suficientes para animar.");
+                        }
+                        const wasAtLatest = frames.length === 0 || currentFrame >= frames.length - 1;
+                        host = data.host;
+                        frames = data.radar.past.slice(-12);
+                        timeline.max = String(frames.length - 1);
+                        timeline.disabled = false;
+                        playButton.disabled = false;
+                        previousButton.disabled = false;
+                        nextButton.disabled = false;
+                        currentFrame = wasAtLatest ? frames.length - 1 : Math.min(currentFrame, frames.length - 1);
+                        showFrame(currentFrame);
+                        statusLabel.textContent = "Pixels RainViewer atualizados.";
+                    })
+                    .catch(error => {
+                        statusLabel.textContent = error.message;
+                    });
+            }
 
             previousButton.addEventListener("click", () => {
-                stopPlayback();
+                stopAnimation();
                 showFrame(currentFrame - 1);
             });
-
             nextButton.addEventListener("click", () => {
-                stopPlayback();
+                stopAnimation();
                 showFrame(currentFrame + 1);
             });
-
             timeline.addEventListener("input", () => {
-                stopPlayback();
+                stopAnimation();
                 showFrame(Number(timeline.value));
             });
+            playButton.addEventListener("click", () => {
+                if (playbackTimer !== null) {
+                    stopAnimation();
+                    return;
+                }
+                playButton.textContent = "Pausar";
+                playButton.setAttribute("aria-pressed", "true");
+                playbackTimer = window.setTimeout(advanceFrame, 600);
+            });
+
+            map.setMaxBounds(saoPauloBounds);
+            loadFrames();
+            window.setInterval(loadFrames, 5 * 60 * 1000);
+            new ResizeObserver(() => map.invalidateSize({ pan: false })).observe(mapElement);
         })();
     </script>
 </body>
