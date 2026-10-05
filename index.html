@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#080808">
+    <meta http-equiv="refresh" content="0; url=gis.html">
+    <title>Radar GIS Local | IPMET</title>
+    <script>window.location.replace("gis.html");</script>
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            min-width: 320px;
+            min-height: 100vh;
+            margin: 0;
+            color: #f4f4f4;
+            background: #080808;
+            font-family: Arial, sans-serif;
+        }
+
+        .radar-app {
+            width: min(100%, 1000px);
+            margin: 0 auto;
+            border-top: 3px solid #e11d2e;
+        }
+
+        .radar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 12px;
+            padding: 16px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .source-link {
+            color: #ff6671;
+            font-size: 13px;
+        }
+
+        .radar-image-wrap {
+            display: grid;
+            min-height: 220px;
+            place-items: center;
+            padding: 8px;
+            background: #000;
+        }
+
+        #radar-frame {
+            display: block;
+            width: 100%;
+            height: auto;
+            max-height: 70vh;
+            object-fit: contain;
+        }
+
+        #radar-frame[hidden] { display: none; }
+
+        .radar-controls {
+            display: grid;
+            grid-template-columns: auto auto auto minmax(100px, 1fr);
+            gap: 8px;
+            align-items: center;
+            padding: 12px 16px;
+            border-top: 1px solid #303030;
+        }
+
+        button {
+            min-height: 38px;
+            padding: 0 12px;
+            border: 1px solid #505050;
+            border-radius: 4px;
+            color: #f4f4f4;
+            background: #171717;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        button:hover, button:focus-visible {
+            border-color: #e11d2e;
+            outline: none;
+        }
+
+        #play-button { border-color: #e11d2e; }
+        #timeline { width: 100%; accent-color: #e11d2e; }
+
+        .radar-footer {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 0 16px 14px;
+            color: #bdbdbd;
+            font-size: 12px;
+        }
+
+        @media (max-width: 600px) {
+            .radar-header { align-items: flex-start; flex-direction: column; }
+            .radar-controls { grid-template-columns: auto auto auto; }
+            #timeline { grid-column: 1 / -1; grid-row: 2; }
+            .radar-footer { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <main class="radar-app">
+        <header class="radar-header">
+            <h1>Radar Meteorológico IPMET</h1>
+            <a class="source-link" href="https://www.ipmetradar.com.br/2animRadar.php" target="_blank" rel="noopener noreferrer">Produto oficial do IPMET</a>
+        </header>
+        <div class="radar-image-wrap">
+            <img id="radar-frame" alt="Quadro do radar animado do IPMET" hidden>
+            <p id="radar-status" role="status">Carregando produto oficial do IPMET...</p>
+        </div>
+        <section class="radar-controls" aria-label="Controles da animação do radar">
+            <button id="previous-button" type="button" aria-label="Quadro anterior">Anterior</button>
+            <button id="play-button" type="button" aria-pressed="false" disabled>Iniciar animação</button>
+            <button id="next-button" type="button" aria-label="Próximo quadro" disabled>Próximo</button>
+            <input id="timeline" type="range" min="0" max="0" value="0" step="1" aria-label="Selecionar quadro do radar" disabled>
+        </section>
+        <footer class="radar-footer">
+            <span id="frame-counter">Aguardando quadros</span>
+            <span id="sync-time">A atualização ocorre quando o GitHub Pages publica uma nova captura.</span>
+        </footer>
+    </main>
+
+    <script>
+        (() => {
+            const image = document.getElementById("radar-frame");
+            const status = document.getElementById("radar-status");
+            const timeline = document.getElementById("timeline");
+            const playButton = document.getElementById("play-button");
+            const previousButton = document.getElementById("previous-button");
+            const nextButton = document.getElementById("next-button");
+            const frameCounter = document.getElementById("frame-counter");
+            const syncTime = document.getElementById("sync-time");
+            let frames = [];
+            let currentFrame = 0;
+            let playbackTimer = null;
+
+            function showFrame(index) {
+                currentFrame = (index + frames.length) % frames.length;
+                timeline.value = String(currentFrame);
+                frameCounter.textContent = `Quadro ${currentFrame + 1} de ${frames.length}`;
+                image.src = `${frames[currentFrame].file}?v=${Date.now()}`;
+            }
+
+            function stopPlayback() {
+                if (playbackTimer !== null) window.clearTimeout(playbackTimer);
+                playbackTimer = null;
+                playButton.textContent = "Iniciar animação";
+                playButton.setAttribute("aria-pressed", "false");
+            }
+
+            function advanceFrame() {
+                currentFrame = (currentFrame + 1) % frames.length;
+                showFrame(currentFrame);
+                playbackTimer = window.setTimeout(advanceFrame, frames[currentFrame].duration);
+            }
+
+            fetch(`radar/manifest.json?v=${Date.now()}`, { cache: "no-store" })
+                .then(response => {
+                    if (!response.ok) throw new Error("O pacote atualizado do radar ainda não foi publicado.");
+                    return response.json();
+                })
+                .then(manifest => {
+                    frames = manifest.frames;
+                    if (!Array.isArray(frames) || frames.length < 2) {
+                        throw new Error("O IPMET não forneceu quadros suficientes para animar.");
+                    }
+
+                    timeline.max = String(frames.length - 1);
+                    timeline.disabled = false;
+                    playButton.disabled = false;
+                    previousButton.disabled = false;
+                    nextButton.disabled = false;
+                    status.hidden = true;
+                    image.hidden = false;
+                    syncTime.textContent = `Arquivo recebido do IPMET em: ${new Date(manifest.fetchedAt).toLocaleString("pt-BR")}`;
+                    showFrame(frames.length - 1);
+                })
+                .catch(error => {
+                    status.textContent = `${error.message} Confira o produto oficial do IPMET pelo link acima.`;
+                });
+
+            playButton.addEventListener("click", () => {
+                if (playbackTimer !== null) {
+                    stopPlayback();
+                    return;
+                }
+
+                if (currentFrame === frames.length - 1) showFrame(0);
+                playButton.textContent = "Pausar";
+                playButton.setAttribute("aria-pressed", "true");
+                playbackTimer = window.setTimeout(advanceFrame, frames[currentFrame].duration);
+            });
+
+            previousButton.addEventListener("click", () => {
+                stopPlayback();
+                showFrame(currentFrame - 1);
+            });
+
+            nextButton.addEventListener("click", () => {
+                stopPlayback();
+                showFrame(currentFrame + 1);
+            });
+
+            timeline.addEventListener("input", () => {
+                stopPlayback();
+                showFrame(Number(timeline.value));
+            });
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#080808">
+    <title>Radar GIS Local | IPMET</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            min-width: 320px;
+            min-height: 100vh;
+            margin: 0;
+            color: #f4f4f4;
+            background: #080808;
+            font-family: Arial, sans-serif;
+        }
+
+        .radar-app {
+            width: min(100%, 1100px);
+            margin: 0 auto;
+            border-top: 3px solid #e11d2e;
+        }
+
+        .radar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 12px;
+            padding: 12px 16px;
+        }
+
+        h1 { margin: 0; font-size: 19px; font-weight: 600; }
+        .source-link { color: #ff6671; font-size: 13px; }
+
+        #radar-map {
+            width: 100%;
+            height: min(68vh, 680px);
+            min-height: 400px;
+            background: #151515;
+        }
+
+        .radar-panel {
+            display: grid;
+            grid-template-columns: minmax(260px, 1fr) minmax(160px, 220px);
+            gap: 16px;
+            align-items: center;
+            padding: 12px 16px;
+            border-top: 1px solid #303030;
+        }
+
+        .radar-controls {
+            display: grid;
+            grid-template-columns: auto auto auto minmax(120px, 1fr);
+            gap: 8px;
+            align-items: center;
+        }
+
+        button {
+            min-height: 36px;
+            padding: 0 11px;
+            border: 1px solid #505050;
+            border-radius: 4px;
+            color: #f4f4f4;
+            background: #171717;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        button:enabled:hover, button:enabled:focus-visible {
+            border-color: #e11d2e;
+            outline: none;
+        }
+
+        #play-button { border-color: #e11d2e; }
+        #timeline { width: 100%; accent-color: #e11d2e; }
+        #radar-status, #frame-time { color: #c7c7c7; font-size: 12px; line-height: 1.4; }
+        #radar-status { margin: 0; }
+
+        .legend { display: flex; align-items: center; gap: 10px; }
+        .legend img { display: block; width: 62px; height: 98px; object-fit: contain; }
+        .legend span { color: #c7c7c7; font-size: 12px; line-height: 1.4; }
+
+        .radar-footer {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 0 16px 12px;
+            color: #aaa;
+            font-size: 11px;
+        }
+
+        .titan-arrow-icon { border: 0; background: transparent; }
+        .titan-arrow {
+            display: block;
+            color: #fff;
+            font-size: 27px;
+            font-weight: 700;
+            line-height: 30px;
+            text-shadow: 0 0 3px #000, 0 0 5px #e11d2e;
+            transform-origin: center;
+        }
+
+        @media (max-width: 650px) {
+            #radar-map { height: 58vh; min-height: 360px; }
+            .radar-header { align-items: flex-start; flex-direction: column; }
+            .radar-panel { grid-template-columns: 1fr; gap: 10px; }
+            .radar-controls { grid-template-columns: auto auto auto; }
+            #timeline { grid-column: 1 / -1; grid-row: 2; }
+            .legend img { width: 48px; height: 76px; }
+            .radar-footer { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <main class="radar-app">
+        <header class="radar-header">
+            <h1>Radar GIS Local · IPMET</h1>
+            <a class="source-link" href="https://www.ipmetradar.com.br/2mobileGis.php" target="_blank" rel="noopener noreferrer">Abrir GIS oficial</a>
+        </header>
+        <div id="radar-map" role="application" aria-label="Mapa interativo do Radar GIS Local do estado de São Paulo"></div>
+        <section class="radar-panel" aria-label="Controles e legenda do radar">
+            <div>
+                <div class="radar-controls">
+                    <button id="previous-button" type="button" aria-label="Quadro anterior" disabled>Anterior</button>
+                    <button id="play-button" type="button" aria-pressed="false" disabled>Iniciar animação</button>
+                    <button id="next-button" type="button" aria-label="Próximo quadro" disabled>Próximo</button>
+                    <input id="timeline" type="range" min="0" max="0" value="0" step="1" aria-label="Selecionar horário do radar" disabled>
+                </div>
+                <p id="frame-time">Carregando imagem atual do radar...</p>
+            </div>
+            <div class="legend">
+                <img id="radar-legend" alt="Legenda oficial de refletividade dBZ do IPMET" hidden>
+                <span>Escala dBZ<br>do IPMET</span>
+            </div>
+            <p id="radar-status" role="status" aria-live="polite">Conectando aos dados oficiais do Radar GIS Local...</p>
+        </section>
+        <footer class="radar-footer">
+            <span id="frame-counter">Aguardando imagem do IPMET</span>
+            <span>Alertas e setas exibidos somente quando fornecidos pelo TITAN.</span>
+        </footer>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        (() => {
+            const mapElement = document.getElementById("radar-map");
+            const status = document.getElementById("radar-status");
+            const frameTime = document.getElementById("frame-time");
+            const frameCounter = document.getElementById("frame-counter");
+            const timeline = document.getElementById("timeline");
+            const playButton = document.getElementById("play-button");
+            const previousButton = document.getElementById("previous-button");
+            const nextButton = document.getElementById("next-button");
+            const initialStateBounds = L.latLngBounds([[-25.310889, -53.108193], [-19.779185, -44.160514]]);
+            const map = L.map(mapElement, {
+                minZoom: 5,
+                maxZoom: 11,
+                maxBounds: initialStateBounds,
+                maxBoundsViscosity: 1
+            });
+            const baseLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                maxZoom: 19,
+                attribution: "&copy; OpenStreetMap contributors"
+            }).addTo(map);
+
+            map.fitBounds(initialStateBounds, { padding: [8, 8] });
+
+            let frames = [];
+            let currentFrame = 0;
+            let playbackTimer = null;
+            let radarLayer = null;
+            let stateLayer = null;
+            let titanLayer = L.layerGroup().addTo(map);
+            let lastManifestFetch = null;
+
+            function parseNumber(value) {
+                const result = Number.parseFloat(String(value ?? "").replace(",", "."));
+                return Number.isFinite(result) ? result : null;
+            }
+
+            function popupFor(feature) {
+                const props = feature.properties || {};
+                const content = document.createElement("div");
+                const title = document.createElement("strong");
+                title.textContent = `Tempestade ${props.ID || "TITAN"}`;
+                content.append(title);
+
+                for (const [label, key] of [["Refletividade", "refletividade"], ["Velocidade", "velocidade"], ["Direção", "direcao"], ["Início", "inicio"]]) {
+                    if (!props[key]) continue;
+                    const row = document.createElement("div");
+                    row.textContent = `${label}: ${String(props[key]).replaceAll("&deg;", "°")}`;
+                    content.append(row);
+                }
+                return content;
+            }
+
+            function renderAlerts(alerts) {
+                titanLayer.clearLayers();
+                const features = Array.isArray(alerts?.features) ? alerts.features : [];
+                if (features.length === 0) {
+                    status.textContent = "Sem células TITAN ativas neste horário.";
+                    return;
+                }
+
+                L.geoJSON(alerts, {
+                    style: { color: "#f04452", weight: 2, opacity: 0.95, fillColor: "#e11d2e", fillOpacity: 0.13 },
+                    onEachFeature: (feature, layer) => layer.bindPopup(popupFor(feature))
+                }).addTo(titanLayer);
+
+                let arrows = 0;
+                for (const feature of features) {
+                    const props = feature.properties || {};
+                    const lat = parseNumber(props.latitude);
+                    const lon = parseNumber(props.longitude);
+                    const direction = parseNumber(String(props.direcao || "").replace("&deg;", ""));
+                    const speed = parseNumber(props.velocidade);
+                    if (lat === null || lon === null || direction === null || speed === null || speed < 0.1) continue;
+
+                    const icon = L.divIcon({
+                        className: "titan-arrow-icon",
+                        html: `<span class="titan-arrow" style="transform:rotate(${direction}deg)">↑</span>`,
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15]
+                    });
+                    L.marker([lat, lon], { icon, keyboard: true })
+                        .bindPopup(popupFor(feature))
+                        .addTo(titanLayer);
+                    arrows += 1;
+                }
+
+                status.textContent = `${features.length} célula(s) TITAN${arrows ? ` · ${arrows} seta(s) de deslocamento` : " · sem direção/velocidade válida para setas"}.`;
+            }
+
+            function showFrame(index) {
+                if (frames.length === 0) return;
+                currentFrame = Math.max(0, Math.min(frames.length - 1, index));
+                const frame = frames[currentFrame];
+                timeline.value = String(currentFrame);
+                frameCounter.textContent = `Quadro ${currentFrame + 1} de ${frames.length}`;
+                frameTime.textContent = `Horário do GIS IPMET: ${frame.radarTime.replace("_", " ")} UTC`;
+                const cacheKey = encodeURIComponent(frame.capturedAt);
+                radarLayer.setUrl(`${frame.image}?v=${cacheKey}`);
+                fetch(`${frame.alerts}?v=${cacheKey}`, { cache: "no-store" })
+                    .then(response => {
+                        if (!response.ok) throw new Error("Falha ao carregar os alertas TITAN.");
+                        return response.json();
+                    })
+                    .then(renderAlerts)
+                    .catch(() => {
+                        titanLayer.clearLayers();
+                        status.textContent = "Imagem do radar disponível; dados TITAN deste quadro indisponíveis.";
+                    });
+            }
+
+            function stopAnimation() {
+                if (playbackTimer !== null) window.clearTimeout(playbackTimer);
+                playbackTimer = null;
+                playButton.textContent = "Iniciar animação";
+                playButton.setAttribute("aria-pressed", "false");
+            }
+
+            function advanceFrame() {
+                currentFrame = (currentFrame + 1) % frames.length;
+                showFrame(currentFrame);
+                playbackTimer = window.setTimeout(advanceFrame, 1000);
+            }
+
+            function displayManifest(manifest) {
+                if (!Array.isArray(manifest.frames) || manifest.frames.length === 0) {
+                    throw new Error("O IPMET ainda não forneceu capturas do GIS.");
+                }
+                const oldPath = frames[currentFrame]?.image;
+                frames = manifest.frames;
+                timeline.max = String(frames.length - 1);
+                timeline.disabled = frames.length < 2;
+                playButton.disabled = frames.length < 2;
+                previousButton.disabled = frames.length < 2;
+                nextButton.disabled = frames.length < 2;
+
+                const stateBounds = L.latLngBounds(manifest.saoPauloBounds);
+                map.setMaxBounds(stateBounds);
+                if (lastManifestFetch === null) map.fitBounds(stateBounds, { padding: [8, 8] });
+
+                if (radarLayer === null) {
+                    radarLayer = L.imageOverlay("", manifest.bounds, { opacity: 0.78, interactive: false }).addTo(map);
+                    L.control.layers({ "OpenStreetMap": baseLayer }, { "Radar IPMET": radarLayer, "Células TITAN": titanLayer }, { collapsed: true }).addTo(map);
+                } else {
+                    radarLayer.setBounds(manifest.bounds);
+                }
+
+                if (stateLayer === null) {
+                    fetch(`radar/${manifest.saoPauloGeoJSON}`, { cache: "force-cache" })
+                        .then(response => {
+                            if (!response.ok) throw new Error("Limite estadual indisponível.");
+                            return response.json();
+                        })
+                        .then(feature => {
+                            stateLayer = L.geoJSON(feature, {
+                                interactive: false,
+                                style: { color: "#e11d2e", weight: 2, opacity: 0.9, fill: false }
+                            }).addTo(map);
+                        })
+                        .catch(() => {});
+                }
+
+                const legend = document.getElementById("radar-legend");
+                legend.src = `radar/${manifest.legend}?v=${encodeURIComponent(manifest.fetchedAt)}`;
+                legend.hidden = false;
+                const selectedIndex = frames.findIndex(frame => frame.image === oldPath);
+                showFrame(selectedIndex >= 0 ? selectedIndex : frames.length - 1);
+                lastManifestFetch = manifest.fetchedAt;
+                if (frames.length < 2) {
+                    status.textContent = "Imagem atual carregada. A animação será habilitada após outra captura diferente.";
+                }
+            }
+
+            function loadManifest() {
+                fetch(`radar/manifest.json?v=${Date.now()}`, { cache: "no-store" })
+                    .then(response => {
+                        if (!response.ok) throw new Error("Capturas do Radar GIS ainda não foram publicadas pelo GitHub Actions.");
+                        return response.json();
+                    })
+                    .then(manifest => {
+                        if (manifest.fetchedAt !== lastManifestFetch) displayManifest(manifest);
+                    })
+                    .catch(error => {
+                        if (frames.length === 0) status.textContent = `${error.message} Abra o GIS oficial do IPMET pelo link acima.`;
+                    });
+            }
+
+            previousButton.addEventListener("click", () => {
+                stopAnimation();
+                showFrame(currentFrame - 1);
+            });
+            nextButton.addEventListener("click", () => {
+                stopAnimation();
+                showFrame(currentFrame + 1);
+            });
+            timeline.addEventListener("input", () => {
+                stopAnimation();
+                showFrame(Number(timeline.value));
+            });
+            playButton.addEventListener("click", () => {
+                if (playbackTimer !== null) {
+                    stopAnimation();
+                    return;
+                }
+                playButton.textContent = "Pausar";
+                playButton.setAttribute("aria-pressed", "true");
+                playbackTimer = window.setTimeout(advanceFrame, 1000);
+            });
+
+            loadManifest();
+            window.setInterval(loadManifest, 60 * 1000);
+            new ResizeObserver(() => map.invalidateSize({ pan: false })).observe(mapElement);
+        })();
+    </script>
+</body>
+</html>
