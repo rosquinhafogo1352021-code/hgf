@@ -191,6 +191,23 @@
                 attribution: "&copy; OpenStreetMap contributors"
             }).addTo(map);
 
+            fetch("radar/sao-paulo.geojson", { cache: "force-cache" })
+                .then(response => {
+                    if (!response.ok) throw new Error("Limite estadual indisponível.");
+                    return response.json();
+                })
+                .then(feature => {
+                    const stateBoundary = L.geoJSON(feature, {
+                        interactive: false,
+                        style: { color: "#e11d2e", weight: 2, opacity: 0.95, fill: false }
+                    }).addTo(map);
+                    map.fitBounds(stateBoundary.getBounds(), { padding: [10, 10] });
+                    map.setMaxBounds(saoPauloBounds);
+                })
+                .catch(() => {
+                    map.fitBounds(saoPauloBounds, { padding: [10, 10] });
+                });
+
             let host = "";
             let frames = [];
             let currentFrame = 0;
